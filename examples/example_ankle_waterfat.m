@@ -5,13 +5,17 @@
 %% add to path: data and functions 
 addpath('./data')
 addpath('./functions')
-%% ankle data downloaded from USC/MultiChannel 3 Echo/Ankle_8ch.mat
+%% ankle data 
+% ------------ Please download data from ISMRM fat-water data "USC/MultiChannel 3 Echo" -------------
 % sensemap computed using ESPIRiT
 load('Ankle_8ch.mat')
 [nx,ny,nz,nc,ne] = size(data.images);
 p.etime = data.TE;
 df = 2*pi*440; %440 Hz for 3T
 yik = data.images;
+%% sensemap 
+% ------------ Please estimate sensemap below (e.g. ESPIRiT) -------------
+load('Ankle_sensemap.mat')
 mag = sum(yik.*conj(sensemap),4);
 mag0 = abs(stackpick(mag,1));
 figure(1);im(mag0)

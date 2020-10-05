@@ -7,7 +7,8 @@
 %% add to path: data and functions 
 addpath('./data')
 addpath('./functions')
-%% data downloaded from kellman_data 
+%% data 
+% ------------ Please download data from ISMRM fat-water data "kellman_data" -------------
 load('PKdata5.mat')
 imDataParams = data; %[xyzcl]
 imDataParams.images = double(data.images); 
