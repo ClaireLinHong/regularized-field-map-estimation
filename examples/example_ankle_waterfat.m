@@ -7,7 +7,6 @@ addpath('./data')
 addpath('./functions')
 %% ankle data 
 % ------------ Please download data from ISMRM fat-water data "USC/MultiChannel 3 Echo" -------------
-% sensemap computed using ESPIRiT
 load('Ankle_8ch.mat')
 [nx,ny,nz,nc,ne] = size(data.images);
 p.etime = data.TE;
