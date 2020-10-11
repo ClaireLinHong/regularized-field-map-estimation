@@ -1,5 +1,6 @@
-function w = winit_water_fat(y, delta, smap, varargin)
+ function w = winit_water_fat(y, delta, smap, varargin)
 %function w = winit_water_fat(y, delta, smap, varargin) 
+% Claire Lin, Sept. 2020
 % Discretized ML estimate of fmap, voxel-wise
 %| in
 %|	y	[np nc n]	n sets of measurements for nc coils
@@ -38,7 +39,7 @@ angs = angle(smap);
 if arg.df
     Gamma = phiInv(arg.relamp,arg.df,delta); %[L,L]
 end
-set = 1; %coil = 1;
+set = 1; 
 nset = cumsum(1:n-1);nset = nset(end);
 wj_mag = zeros(np,nset,nc,nc);
 d2 = zeros(1,nset);

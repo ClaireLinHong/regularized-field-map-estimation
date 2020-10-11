@@ -1,5 +1,5 @@
 function [outParams, time] = fmap_est_graphcut(imDataParams, algoParams)
-% Claire Lin, Sept. 2020: add outputs to Hernando's graphcut for convergence comparison
+% Claire Lin, Sept. 2020: added outputs to Hernando's graphcut for convergence comparison
 % Description: Fat-water separation using regularized fieldmap formulation and graph cut solution. 
 %
 % Hernando D, Kellman P, Haldar JP, Liang ZP. Robust water/fat separation in the presence of large 

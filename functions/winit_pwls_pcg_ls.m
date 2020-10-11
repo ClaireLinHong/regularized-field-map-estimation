@@ -1,5 +1,6 @@
-function w = winit_pwls_pcg_ls(w, y, delta, smap, varargin)
+  function w = winit_pwls_pcg_ls(w, y, delta, smap, varargin)
 % function w = winit_pwls_pcg_ls(w, y, delta, smap, varargin)
+% Claire Lin, Sept. 2020
 % PWLS on discretized ML estimate of winit
 %
 % min(w) weighted quadratic + R(w)
@@ -11,12 +12,12 @@ function w = winit_pwls_pcg_ls(w, y, delta, smap, varargin)
 %|
 %| option
 %|	stepper {'qs',# its}	monotonic line search parameters (def: {})
-%|	niter			# of iterations (def: 1)
+%|	niter			# of iterations (def: 30)
 %|	maskR	[(np)]	logical reconstruction mask (required!)
 %|	order			order of the finite diff matrix (def: 2)
 %|	l2b             regularization parameter (2^) (def: -6)
 %|	gammaType		CG direction: PR = Polak-Ribiere or FR = Fletcher-Reeves
-%|	precon			Preconditioner: 'diag', 'chol', 'ichol' (def: 'none' = '')
+%|	precon			Preconditioner: 'diag', 'chol', 'ichol'(def))
 %|	reset			# of iterations before resetting direction (def: inf)
 %|  df              delta f value in water-fat imaging (def: 0)
 %|  relamp          relative amplitude in multipeak water-fat  (def: 1)
@@ -26,12 +27,12 @@ function w = winit_pwls_pcg_ls(w, y, delta, smap, varargin)
 %|	w   [np 1]	PWLS estimate of winit
 
 arg.stepper = {};
-arg.niter = 1;
+arg.niter = 30;
 arg.maskR = [];
 arg.order = 2;
 arg.l2b = -6;
-arg.gammaType = [];
-arg.precon = [];
+arg.gammaType = 'PR';
+arg.precon = 'ichol';
 arg.reset = inf;
 arg.df = 0;
 arg.relamp = 1;
@@ -112,12 +113,11 @@ for j=1:n % for each pair of scans
     end
 end
 %% compute |s_c s_d' y_dj' y_ci| /L/s * (tj - ti)^2
-sjtotal(sjtotal==0) = 1; %cl: avoid outside mask 0 issue
+sjtotal(sjtotal==0) = 1; %avoid outside mask = 0
 wj_mag = wj_mag./sjtotal;
 if ~arg.df
     wj_mag = wj_mag/n;
 end
-%wj_mag(isnan(wj_mag)) = 0;
 dCC = diag(CC);
 %% initialize projections and NCG variables
 CCw = CC * w;
@@ -126,7 +126,6 @@ warned.dir = 0;
 warned.step = 0;
 %% begin iterations
 fprintf('\n ********** ite_solve: NCG **********\n')
-%cost(1) = 0.5*sum(wj_mag.*((w - w0).^2),'all') + norm(C*w,'fro');
 cost(1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + norm(C*w,'fro');
 fprintf(' ite: %d , cost: %f3\n', 0, cost(1)) 
 %%
@@ -232,6 +231,7 @@ for iter=1:arg.niter
     fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1)) 
 end
 end
+
 function Gamma = phiInv(relamp,df,delta)
 n = length(delta);
 phi = [ones(n,1) sum(relamp.*exp(1i*delta(:)*df),2)]; %[n,2]

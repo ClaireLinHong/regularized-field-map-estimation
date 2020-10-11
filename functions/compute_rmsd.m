@@ -1,7 +1,9 @@
 function error = compute_rmsd(argsError, x, varargin)
 % Claire Lin, May 2020
 % plot RMSD (in Hz) for paper
+%
 % input:
+% x: image to compare with
 % argsError [n,3] cell: n methods, each w/ name, time, x, each of length neval
 % output:
 % error [n,1] cell: y coordinates of plots, each of length neval
