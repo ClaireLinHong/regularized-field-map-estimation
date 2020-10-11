@@ -3,9 +3,8 @@
 %|
 %| Phase unwrapping of multiple data sets (w denotes frequency)
 %| using Huber's algorithm for quadratic surrogates
-%| and sparse Cholesky factorization.
-%| Can be 1d, 2d, etc., depending on R.
-%| However, 3D problems may require too much memory for this to be practical!
+%| or sparse Cholesky factorization.
+%| 3D, multi-coil version 
 %|
 %| cost(w) = sum(i=0 to n-1) sum(j=0 to n-1)
 %|		|yi*yj| (1 - cos(w*(dj-di) + \angle(yi) - \angle(yj)) + R(w)
@@ -18,12 +17,12 @@
 %|  smap [np nc]    coil maps
 %|
 %| options
-%|	niter			# of iterations (default 1)
-%|	maskR	[(np)]	logical support mask (default full)
-%|	order			order of the finite diff reg. (default 2)
-%|	l2b             regularization parameter (2^)
-%|  hess            'diag' or 'chol'
-%|	dim             2 (2d) or 3 (3d) problem
+%|	niter			# of iterations (default: 30)
+%|	maskR	[(np)]	logical support mask (required)
+%|	order			order of the finite diff reg. (def: 2)
+%|	l2b             regularization parameter (2^) (def: -6)
+%|  hess            'diag' (default) or 'chol'
+%|	dim             2 (2d) or 3 (3d) problem (def: 3)
 %|  df              delta f value in water-fat imaging (def: 0)
 %|  relamp          relative amplitude in multipeak water-fat  (def: 1)
 %|
@@ -32,11 +31,19 @@
 %|  out.xw / out.wf [np 1] water / fat images if arg.df~=0
 %|	times	[niter+1 1]		time for each isave iteration (optional)
 %|
-%| 2020-01-31 Claire Lin, multicoil implementation
+%| This algorithm is based on the paper:
+%| C Y Lin, J A Fessler, 
+%| "Efficient Regularized Field Map Estimation in 3D MRI", TCI 2020
 
-if nargin < 3, help(mfilename), error(mfilename), end
+if nargin >= 1 && streq(w, 'test')
+	out = fmap_est_qm_test(w, varargin{:});
+	if ~nargout, clear out, end
+return
+end
 
-arg.niter = 1;
+if nargin < 4, help(mfilename), error(mfilename), end
+
+arg.niter = 30;
 arg.maskR = [];
 arg.order = 2;
 arg.l2b = -6;
@@ -46,24 +53,23 @@ arg.df = 0;
 arg.relamp = 1;
 arg = vararg_pair(arg, varargin);
 
-if isempty(arg.maskR)
-	fail('Mask is required so that image dimensions are known!')
-end
-if ~islogical(arg.maskR)
-	fail('Mask must be logical!')
-end
-
 w = double(w);
 y = double(y);
 
-% sparse finite-difference regularizing matrix (non-circulant)
+if isempty(arg.maskR)
+	fail('Mask required!')
+end
+
+% create the sparse regularization matrix
 R = Reg1(arg.maskR, 'beta', 2^arg.l2b, 'order', arg.order, ...
-	'distance_power', 2, 'type_diff', 'spmat', 'type_penal', 'mat');
+	'distance_power', 2, 'type_diff', 'spmat', 'type_penal', ...
+	'mat');
 C = R.C;
 if ~issparse(C)
 	fail('CC = C^H * C is too slow if not sparse')
 end
 CC = C' * C;
+
 if strcmp(arg.hess,'diag')
     if arg.order == 1
         dCC = 2^arg.l2b*4*arg.dim;
@@ -123,14 +129,14 @@ for j=1:n % for each pair of scans
     end
 end
 % compute |s_c s_d' y_dj' y_ci| /L/s * (tj - ti)^2
-sjtotal(sjtotal==0) = 1; %cl: avoid outside mask 0 issue
+sjtotal(sjtotal==0) = 1; %avoid outside mask = 0 
 wj_mag = wj_mag./sjtotal;
 if ~arg.df
     wj_mag = wj_mag/n;
 end
 wm_deltaD = wj_mag .* d2;
 wm_deltaD2 = wj_mag .* (d2.^2);
-ang2(isnan(ang2))=0; %cl: avoid atan nan issue
+ang2(isnan(ang2))=0; %avoid atan causing nan 
 
 % prepare output variables
 out.ws = zeros(numel(w(:)), arg.niter+1);
@@ -180,12 +186,12 @@ end
 end 
 
 function [hderiv, hcurv, sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w)
-    % compute the data-fit derivatives and curvatures as in Funai paper
-    sm = w * d2 + ang2;
-    hderiv = sum(wm_deltaD .* sin(sm), [2:4]);
+% compute the data-fit derivatives and curvatures as in Funai paper
+sm = w * d2 + ang2;
+hderiv = sum(wm_deltaD .* sin(sm), [2:4]);
 
-    srm = mod(sm + pi,2*pi) - pi;
-    hcurv = sum(wm_deltaD2 .* ir_sinc_nopi(srm), [2:4]);
+srm = mod(sm + pi,2*pi) - pi;
+hcurv = sum(wm_deltaD2 .* ir_sinc_nopi(srm), [2:4]);
 end
 
 function Gamma = phiInv(relamp,df,delta)
@@ -204,4 +210,54 @@ for ip = 1:np
     yc = permute(y(ip,:,:),[1,3,2]);
     x(:,ip) = B\yc(:);
 end
+end
+
+function wmap = fmap_est_qm_test(type, varargin)
+% test example
+printm 'simulate noisy multicoil 3d data'
+etime = [0 2 10] * 1e-3; % echo times
+SNR = 20; % dB
+ne = length(etime);
+dir = [path_find_dir('mri') '/phase-data/'];
+wtrue = 2*pi * fld_read([dir 'fieldmap128.fld']); % "true" fieldmap
+mag = fld_read([dir 'mag128.fld']); % "true" magnitude
+[nx ny] = size(mag); % 128
+nz = 2; nc = 4;
+wtrue = repmat(wtrue,[1,1,nz]);
+mag = repmat(mag,[1,1,nz]);
+mask = mag > 0.05 * max(mag(:));
+smap = double(ir_mri_sensemap_sim('nx', nx, 'ny', ny, 'nz', nz, 'ncoil', nc));
+
+im plc 2 3
+im(1, mag, 'true mag'), cbar
+im(2, mask,'mask'), cbar
+im(3, smap, 'sense map'), cbar
+im(4, wtrue/(2*pi), 'true field map', [-40, 128]), cbar('Hz')
+
+image_power = 10*log10(sum(mag.^2,'all')/(nx*ny*nz));
+noise_power = image_power - SNR;
+noise_std = sqrt(10^(noise_power/10));
+noise_std = noise_std / 2; % because complex
+yik = zeros(nx,ny,nz,nc,ne);
+for kk=1:ne
+    yik(:,:,:,:,kk) = mag ...
+        .* exp(1i * wtrue * (etime(kk) - etime(1))) ...
+        .* smap; 
+end
+rng(0)
+yik = yik + noise_std * (randn(size(yik)) + 1i * randn(size(yik)));
+
+yik_c = reshape(yik,[nx*ny*nz,nc,ne]);
+smap_c = reshape(smap,[nx*ny*nz,nc]);
+yik_sos = reshape(sum(yik.*reshape(conj(smap),[nx,ny,nz,nc]),4),[nx,ny,nz,ne]);%coil combine
+winit = angle(stackpick(yik_sos,2) .* conj(stackpick(yik_sos,1))) ...
+    / (etime(2) - etime(1));
+
+printm 'estimate field map'
+[out,cost,time] = fmap_est_qm(winit(mask), yik_c(mask,:,:), etime, ...
+    smap_c(mask,:),'maskR', mask);
+wmap = embed(out.ws(:,end),mask);
+
+im(5, winit / (2*pi), 'initial field map', [-40,128]), cbar('Hz')
+im(6, wmap / (2*pi), 'regularized field map', [-40,128]), cbar('Hz')
 end

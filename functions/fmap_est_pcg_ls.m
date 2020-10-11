@@ -1,8 +1,9 @@
-function [out,cost,time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
+ function [out,cost,time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
 %function [out,cost,time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
 %|
 %| Phase unwrapping of multiple data sets (w denotes frequency)
 %| using a NCG with monotonic line search
+%| 3D, multi-coil version
 %|
 %| cost(w) = sum(i=0 to n-1) sum(j=0 to n-1)
 %|		|yi*yj| wj (1 - cos(w*(dj-di) + \angle(yi) - \angle(yj)) + R(w)
@@ -13,14 +14,14 @@ function [out,cost,time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
 %|	delta	[1 n]	row vector of n echo time offsets
 %|  smap [np nc]    coil maps
 %|
-%| option
-%|	stepper {'qs',# its}	monotonic line search parameters (def: {})
-%|	niter			# of iterations (def: 1)
+%| options
+%|	stepper {'qs',# its}	monotonic line search parameters (default: {})
+%|	niter			# of iterations (def: 30)
 %|	maskR	[(np)]	logical reconstruction mask (required!)
 %|	order			order of the finite diff matrix (def: 2)
 %|	l2b             regularization parameter (2^) (def: -6)
-%|	gammaType		CG direction: PR = Polak-Ribiere or FR = Fletcher-Reeves
-%|	precon			Preconditioner: 'diag', 'chol', 'ichol' (def: 'none' = '')
+%|	gammaType		CG direction: PR = Polak-Ribiere (default) or FR = Fletcher-Reeves
+%|	precon			Preconditioner: 'diag', 'chol', 'ichol' (def: 'ichol')
 %|	reset			# of iterations before resetting direction (def: inf)
 %|  df              delta f value in water-fat imaging (def: 0)
 %|  relamp          relative amplitude in multipeak water-fat  (def: 1)
@@ -32,15 +33,25 @@ function [out,cost,time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
 %|  cost   [niter+1 1]   (nonconvex) cost for each iteration
 %|	time   [niter+1 1]	time for each iteration
 %|
-%| 2020-01-31 Claire Lin, multicoil implementation
+%| This algorithm is based on the paper:
+%| C Y Lin, J A Fessler, 
+%| "Efficient Regularized Field Map Estimation in 3D MRI", TCI 2020
+
+if nargin >= 1 && streq(w, 'test')
+	out = fmap_est_pcg_ls_test(w, varargin{:});
+	if ~nargout, clear out, end
+return
+end
+
+if nargin < 4, help(mfilename), error(mfilename), end
 
 arg.stepper = {'qs', 3}; % quad surr with this # of subiterations
-arg.niter = 1;
+arg.niter = 30;
 arg.maskR = [];
 arg.order = 2;
 arg.l2b = -6;
-arg.gammaType = [];
-arg.precon = '';
+arg.gammaType = 'PR';
+arg.precon = 'ichol';
 arg.reset = inf;
 arg.df = 0;
 arg.relamp = 1;
@@ -72,8 +83,6 @@ if length(w) ~= sum(arg.maskR(:))
 end
 
 [np,nc,n] = size(y);
-
-% create timing variable
 time = zeros(arg.niter+1,1);
 cost = zeros(arg.niter+1,1);
 
@@ -101,7 +110,7 @@ for j=1:n % for each pair of scans
             for c = 1:nc
                 for d = 1:nc
                     wj_mag(:,set,c,d) = smap(:,c) .* conj(smap(:,d)) .*...
-                        conj(y(:,c,i)) .* y(:,d,j); %cl: not mag in huh
+                        conj(y(:,c,i)) .* y(:,d,j); 
                     wj_mag(:,set,c,d) = abs(wj_mag(:,set,c,d));
                     % difference of the echo times and angles
                     ang2(:,set,c,d) = angs(:,c) - angs(:,d) + ...
@@ -117,14 +126,14 @@ for j=1:n % for each pair of scans
     end
 end
 % compute |s_c s_d' y_dj' y_ci| /L/s * (tj - ti)^2
-sjtotal(sjtotal==0) = 1; %cl: avoid outside mask 0 issue
+sjtotal(sjtotal==0) = 1; %avoid outside mask = 0 
 wj_mag = wj_mag./sjtotal;
 if ~arg.df
     wj_mag = wj_mag/n;
 end
 wm_deltaD = wj_mag .* d2;
 wm_deltaD2 = wj_mag .* (d2.^2);
-ang2(isnan(ang2))=0; %cl: avoid atan nan issue
+ang2(isnan(ang2))=0; %avoid atan causing nan 
 
 % prepare outpute variables
 out.ws = zeros(length(w(:)), arg.niter+1);
@@ -274,7 +283,6 @@ end
 
 function [hderiv, hcurv, sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w)
 % compute the data-fit derivatives and curvatures as in Funai paper
-
 sm = w * d2 + ang2;
 hderiv = 2 * sum(wm_deltaD .* sin(sm), [2:4]);
 
@@ -298,4 +306,54 @@ for ip = 1:np
     yc = permute(y(ip,:,:),[1,3,2]);
     x(:,ip) = B\yc(:);
 end
+end
+
+function wmap = fmap_est_pcg_ls_test(type, varargin)
+% test example
+printm 'simulate noisy multicoil 3d data'
+etime = [0 2 10] * 1e-3; % echo times
+SNR = 20; % dB
+ne = length(etime);
+dir = [path_find_dir('mri') '/phase-data/'];
+wtrue = 2*pi * fld_read([dir 'fieldmap128.fld']); % "true" fieldmap
+mag = fld_read([dir 'mag128.fld']); % "true" magnitude
+[nx ny] = size(mag); % 128
+nz = 2; nc = 4;
+wtrue = repmat(wtrue,[1,1,nz]);
+mag = repmat(mag,[1,1,nz]);
+mask = mag > 0.05 * max(mag(:));
+smap = double(ir_mri_sensemap_sim('nx', nx, 'ny', ny, 'nz', nz, 'ncoil', nc));
+
+im plc 2 3
+im(1, mag, 'true mag'), cbar
+im(2, mask,'mask'), cbar
+im(3, smap, 'sense map'), cbar
+im(4, wtrue/(2*pi), 'true field map', [-40, 128]), cbar('Hz')
+
+image_power = 10*log10(sum(mag.^2,'all')/(nx*ny*nz));
+noise_power = image_power - SNR;
+noise_std = sqrt(10^(noise_power/10));
+noise_std = noise_std / 2; % because complex
+yik = zeros(nx,ny,nz,nc,ne);
+for kk=1:ne
+    yik(:,:,:,:,kk) = mag ...
+        .* exp(1i * wtrue * (etime(kk) - etime(1))) ...
+        .* smap; 
+end
+rng(0)
+yik = yik + noise_std * (randn(size(yik)) + 1i * randn(size(yik)));
+
+yik_c = reshape(yik,[nx*ny*nz,nc,ne]);
+smap_c = reshape(smap,[nx*ny*nz,nc]);
+yik_sos = reshape(sum(yik.*reshape(conj(smap),[nx,ny,nz,nc]),4),[nx,ny,nz,ne]);%coil combine
+winit = angle(stackpick(yik_sos,2) .* conj(stackpick(yik_sos,1))) ...
+    / (etime(2) - etime(1));
+
+printm 'estimate field map'
+[out,cost,time] = fmap_est_pcg_ls(winit(mask), yik_c(mask,:,:), etime, ...
+    smap_c(mask,:),'maskR', mask);
+wmap = embed(out.ws(:,end),mask);
+
+im(5, winit / (2*pi), 'initial field map', [-40,128]), cbar('Hz')
+im(6, wmap / (2*pi), 'regularized field map', [-40,128]), cbar('Hz')
 end
