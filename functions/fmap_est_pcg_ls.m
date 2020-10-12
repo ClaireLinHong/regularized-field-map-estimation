@@ -159,7 +159,7 @@ for iter=1:arg.niter
     
 	grad = hderiv + CCw;
 	ngrad = -grad;
-    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
+    cost(iter) = sum(wj_mag.*(1-cos(sm)),1:4) + norm(C*w,'fro');
 
     fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter)) 
 
@@ -177,7 +177,7 @@ for iter=1:arg.niter
 		H = spdiag(hcurv) + CC;
 		alpha = max(max(sum(abs(H),2) ./ diag(H)) - 2,0); % cl max with 0
         if arg.tol
-            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],'all'),'diagcomp',alpha));
+            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],[1,2]),'diagcomp',alpha));
         else
             L = ichol(H);
         end
@@ -268,7 +268,7 @@ for iter=1:arg.niter
 end
 
 sm = w * d2 + ang2;
-cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
+cost(iter+1) = sum(wj_mag.*(1-cos(sm)),1:4) + norm(C*w,'fro');
 
 fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1)) 
 
@@ -312,7 +312,7 @@ function wmap = fmap_est_pcg_ls_test(type, varargin)
 % test example
 printm 'simulate noisy multicoil 3d data'
 etime = [0 2 10] * 1e-3; % echo times
-SNR = 20; % dB
+SNR = 30; % dB
 ne = length(etime);
 dir = [path_find_dir('mri') '/phase-data/'];
 wtrue = 2*pi * fld_read([dir 'fieldmap128.fld']); % "true" fieldmap
@@ -322,6 +322,9 @@ nz = 2; nc = 4;
 wtrue = repmat(wtrue,[1,1,nz]);
 mag = repmat(mag,[1,1,nz]);
 mask = mag > 0.05 * max(mag(:));
+for iz = 1:nz
+    mask(:,:,iz) = bwconvhull(mask(:,:,iz), 'union');
+end
 smap = double(ir_mri_sensemap_sim('nx', nx, 'ny', ny, 'nz', nz, 'ncoil', nc));
 
 im plc 2 3
@@ -330,7 +333,7 @@ im(2, mask,'mask'), cbar
 im(3, smap, 'sense map'), cbar
 im(4, wtrue/(2*pi), 'true field map', [-40, 128]), cbar('Hz')
 
-image_power = 10*log10(sum(mag.^2,'all')/(nx*ny*nz));
+image_power = 10*log10(sum(mag.^2,1:3)/(nx*ny*nz));
 noise_power = image_power - SNR;
 noise_std = sqrt(10^(noise_power/10));
 noise_std = noise_std / 2; % because complex
@@ -350,10 +353,10 @@ winit = angle(stackpick(yik_sos,2) .* conj(stackpick(yik_sos,1))) ...
     / (etime(2) - etime(1));
 
 printm 'estimate field map'
-[out,cost,time] = fmap_est_pcg_ls(winit(mask), yik_c(mask,:,:), etime, ...
-    smap_c(mask,:),'maskR', mask);
+[out,cost,time] = fmap_est_pcg_ls(winit(mask),yik_c(mask,:,:),etime, ...
+    smap_c(mask,:),'maskR', mask,'l2b',-3,'niter',20,'order',1);
 wmap = embed(out.ws(:,end),mask);
 
-im(5, winit / (2*pi), 'initial field map', [-40,128]), cbar('Hz')
+im(5, winit.*mask / (2*pi), 'initial field map', [-40,128]), cbar('Hz')
 im(6, wmap / (2*pi), 'regularized field map', [-40,128]), cbar('Hz')
 end
