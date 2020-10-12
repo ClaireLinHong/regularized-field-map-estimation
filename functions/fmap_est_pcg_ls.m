@@ -159,7 +159,7 @@ for iter=1:arg.niter
     
 	grad = hderiv + CCw;
 	ngrad = -grad;
-    cost(iter) = sum(wj_mag.*(1-cos(sm)),1:4) + norm(C*w,'fro');
+    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
 
     fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter)) 
 
@@ -177,7 +177,7 @@ for iter=1:arg.niter
 		H = spdiag(hcurv) + CC;
 		alpha = max(max(sum(abs(H),2) ./ diag(H)) - 2,0); % cl max with 0
         if arg.tol
-            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],[1,2]),'diagcomp',alpha));
+            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],'all'),'diagcomp',alpha));
         else
             L = ichol(H);
         end
@@ -268,7 +268,7 @@ for iter=1:arg.niter
 end
 
 sm = w * d2 + ang2;
-cost(iter+1) = sum(wj_mag.*(1-cos(sm)),1:4) + norm(C*w,'fro');
+cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
 
 fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1)) 
 
@@ -331,9 +331,10 @@ im plc 2 3
 im(1, mag, 'true mag'), cbar
 im(2, mask,'mask'), cbar
 im(3, smap, 'sense map'), cbar
-im(4, wtrue/(2*pi), 'true field map', [-40, 128]), cbar('Hz')
+clim = [-40, 128];
+im(4, wtrue/(2*pi), 'true field map', clim), cbar('Hz')
 
-image_power = 10*log10(sum(mag.^2,1:3)/(nx*ny*nz));
+image_power = 10*log10(sum(mag.^2,'all')/(nx*ny*nz));
 noise_power = image_power - SNR;
 noise_std = sqrt(10^(noise_power/10));
 noise_std = noise_std / 2; % because complex
@@ -357,6 +358,13 @@ printm 'estimate field map'
     smap_c(mask,:),'maskR', mask,'l2b',-3,'niter',20,'order',1);
 wmap = embed(out.ws(:,end),mask);
 
-im(5, winit.*mask / (2*pi), 'initial field map', [-40,128]), cbar('Hz')
-im(6, wmap / (2*pi), 'regularized field map', [-40,128]), cbar('Hz')
+	finit = winit(mask) / (2*pi);
+	ftrue = wtrue(mask) / (2*pi);
+	fpcg = wmap(mask) / (2*pi);
+	rmse_init = sqrt(sum((finit - ftrue).^2) / sum(mask(:)));
+	rmse_pcg = sqrt(sum((fpcg - ftrue).^2) / sum(mask(:)));
+	im(5, embed(finit,mask), 'initial field map', clim), cbar('Hz')
+	titlef('initial field map, RMSE %3.1f Hz', rmse_init)
+	im(6, embed(fpcg,mask), 'regularized field map', clim), cbar('Hz')
+	titlef('regularized field map, RMSE %3.1f Hz', rmse_pcg)
 end

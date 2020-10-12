@@ -1,4 +1,4 @@
- function [out, cost, times] = fmap_est_qm(w, y, delta, smap, varargin)
+function [out, cost, times] = fmap_est_qm(w, y, delta, smap, varargin)
 %function [out, cost, times] = fmap_est_qm(w, y, delta, smap, varargin)
 %|
 %| Phase unwrapping of multiple data sets (w denotes frequency)
@@ -150,7 +150,7 @@ for iter = 1:arg.niter
 	% (numerator is the derivative of original cost function at current guess,
 	% denominator is the curvatures from Funai)    
     [grad, denom, sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w);
-    cost(iter) = sum(wj_mag.*(1-cos(sm)),1:4) + norm(C*w,'fro');
+    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
     fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter)) 
     
 	% add the regularization terms (and account for symmetric pairs with 2*)
@@ -174,7 +174,7 @@ for iter = 1:arg.niter
 end
 
 sm = w * d2 + ang2;
-cost(iter+1) = sum(wj_mag.*(1-cos(sm)),1:4) + norm(C*w,'fro');
+cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
 
 fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1)) 
 %output water & fat images
@@ -235,9 +235,10 @@ im plc 2 3
 im(1, mag, 'true mag'), cbar
 im(2, mask,'mask'), cbar
 im(3, smap, 'sense map'), cbar
-im(4, wtrue/(2*pi), 'true field map', [-40, 128]), cbar('Hz')
+clim = [-40, 128];
+im(4, wtrue/(2*pi), 'true field map', clim), cbar('Hz')
 
-image_power = 10*log10(sum(mag.^2,1:3)/(nx*ny*nz));
+image_power = 10*log10(sum(mag.^2,'all')/(nx*ny*nz));
 noise_power = image_power - SNR;
 noise_std = sqrt(10^(noise_power/10));
 noise_std = noise_std / 2; % because complex
@@ -258,9 +259,16 @@ winit = angle(stackpick(yik_sos,2) .* conj(stackpick(yik_sos,1))) ...
 
 printm 'estimate field map'
 [out,cost,time] = fmap_est_qm(winit(mask),yik_c(mask,:,:),etime, ...
-    smap_c(mask,:),'maskR', mask,'l2b',-3,'niter',100,'order',1);
+   	smap_c(mask,:),'maskR', mask,'l2b',-3,'niter',100,'order',1);
 wmap = embed(out.ws(:,end),mask);
 
-im(5, winit.*mask / (2*pi), 'initial field map', [-40,128]), cbar('Hz')
-im(6, wmap / (2*pi), 'regularized field map', [-40,128]), cbar('Hz')
+	finit = winit(mask) / (2*pi);
+	ftrue = wtrue(mask) / (2*pi);
+	fqm = wmap(mask) / (2*pi);
+	rmse_init = sqrt(sum((finit - ftrue).^2) / sum(mask(:)));
+	rmse_qm = sqrt(sum((fqm - ftrue).^2) / sum(mask(:)));
+	im(5, embed(finit,mask), 'initial field map', clim), cbar('Hz')
+	titlef('initial field map, RMSE %3.1f Hz', rmse_init)
+	im(6, embed(fqm,mask), 'regularized field map', clim), cbar('Hz')
+	titlef('regularized field map, RMSE %3.1f Hz', rmse_qm)
 end
