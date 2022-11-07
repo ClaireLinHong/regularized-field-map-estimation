@@ -1,10 +1,10 @@
-function [out, cost, times] = fmap_est_qm(w, y, delta, smap, varargin)
+ function [out, cost, times] = fmap_est_qm(w, y, delta, smap, varargin)
 %function [out, cost, times] = fmap_est_qm(w, y, delta, smap, varargin)
 %|
 %| Phase unwrapping of multiple data sets (w denotes frequency)
 %| using Huber's algorithm for quadratic surrogates
 %| or sparse Cholesky factorization.
-%| 3D, multi-coil version 
+%| 3D, multi-coil version
 %|
 %| cost(w) = sum(i=0 to n-1) sum(j=0 to n-1)
 %|		|yi*yj| (1 - cos(w*(dj-di) + \angle(yi) - \angle(yj)) + R(w)
@@ -32,7 +32,7 @@ function [out, cost, times] = fmap_est_qm(w, y, delta, smap, varargin)
 %|	times	[niter+1 1]		time for each isave iteration (optional)
 %|
 %| This algorithm is based on the paper:
-%| C Y Lin, J A Fessler, 
+%| C Y Lin, J A Fessler,
 %| "Efficient Regularized Field Map Estimation in 3D MRI", TCI 2020
 
 if nargin >= 1 && streq(w, 'test')
@@ -53,6 +53,7 @@ arg.df = 0;
 arg.relamp = 1;
 arg = vararg_pair(arg, varargin);
 
+%% prepare variables and finite differencing matrices
 w = double(w);
 y = double(y);
 
@@ -93,7 +94,7 @@ cost = zeros(arg.niter+1,1);
 % check the data size matches the echo times
 if n ~= size(delta, 2), fail 'need delta to be [1 n]', end
 
-%% calculate the magnitude and angles used in the data-fit curvatures 
+%% calculate the magnitude and angles used in the data-fit curvatures
 abss = abs(smap);
 sjtotal = sum(abss.^2, 2); %[np,1]
 angy = angle(y);
@@ -106,6 +107,7 @@ nset = cumsum(1:n-1);nset = nset(end);
 wj_mag = zeros(np,nset,nc,nc);
 d2 = zeros(1,nset);
 ang2 = zeros(np,nset,nc,nc);
+
 for j=1:n % for each pair of scans
     for i=1:n
         if i<j % only need one pair of differences
@@ -113,7 +115,7 @@ for j=1:n % for each pair of scans
             for c = 1:nc
                 for d = 1:nc
                     wj_mag(:,set,c,d) = smap(:,c) .* conj(smap(:,d)) .*...
-                        conj(y(:,c,i)) .* y(:,d,j); 
+                        conj(y(:,c,i)) .* y(:,d,j);
                     wj_mag(:,set,c,d) = abs(wj_mag(:,set,c,d));
                     % difference of the echo times and angles
                     ang2(:,set,c,d) = angs(:,c) - angs(:,d) + ...
@@ -121,7 +123,7 @@ for j=1:n % for each pair of scans
                     if arg.df
                         wj_mag(:,set,c,d) = wj_mag(:,set,c,d)*abs(Gamma(i,j));
                         ang2(:,set,c,d) = ang2(:,set,c,d) + angle(Gamma(i,j));
-                    end 
+                    end
                 end
             end
             set = set+1;
@@ -129,14 +131,14 @@ for j=1:n % for each pair of scans
     end
 end
 % compute |s_c s_d' y_dj' y_ci| /L/s * (tj - ti)^2
-sjtotal(sjtotal==0) = 1; %avoid outside mask = 0 
+sjtotal(sjtotal==0) = 1; %avoid outside mask = 0
 wj_mag = wj_mag./sjtotal;
 if ~arg.df
     wj_mag = wj_mag/n;
 end
 wm_deltaD = wj_mag .* d2;
 wm_deltaD2 = wj_mag .* (d2.^2);
-ang2(isnan(ang2))=0; %avoid atan causing nan 
+ang2(isnan(ang2))=0; %avoid atan causing nan
 
 % prepare output variables
 out.ws = zeros(numel(w(:)), arg.niter+1);
@@ -148,11 +150,11 @@ fprintf('\n ********** ite_solve: QS Huber **********\n')
 for iter = 1:arg.niter
     % compute num & denom contribution for each data-fit surrogate function
 	% (numerator is the derivative of original cost function at current guess,
-	% denominator is the curvatures from Funai)    
+	% denominator is the curvatures from Funai)
     [grad, denom, sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w);
     cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
-    fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter)) 
-    
+    fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
+
 	% add the regularization terms (and account for symmetric pairs with 2*)
 	grad = 2*grad + (CC * w); % R.cgrad(R, w2);
     switch arg.hess
@@ -176,14 +178,16 @@ end
 sm = w * d2 + ang2;
 cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
 
-fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1)) 
+fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1))
+
 %output water & fat images
 if arg.df
     x = decomp(w,arg.relamp,arg.df,delta,smap,y);
     out.xw = x(1,:).';
     out.xf = x(2,:).';
 end
-end 
+
+end
 
 function [hderiv, hcurv, sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w)
 % compute the data-fit derivatives and curvatures as in Funai paper
@@ -246,7 +250,7 @@ yik = zeros(nx,ny,nz,nc,ne);
 for kk=1:ne
     yik(:,:,:,:,kk) = mag ...
         .* exp(1i * wtrue * (etime(kk) - etime(1))) ...
-        .* smap; 
+        .* smap;
 end
 rng(0)
 yik = yik + noise_std * (randn(size(yik)) + 1i * randn(size(yik)));
