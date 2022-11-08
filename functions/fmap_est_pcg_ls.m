@@ -159,7 +159,7 @@ for iter=1:arg.niter
 
 	grad = hderiv + CCw;
 	ngrad = -grad;
-    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
+    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5*norm(C*w,'fro')^2;
 
     fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
 
@@ -268,7 +268,7 @@ for iter=1:arg.niter
 end
 
 sm = w * d2 + ang2;
-cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
+cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5*norm(C*w,'fro')^2;
 
 fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1))
 
