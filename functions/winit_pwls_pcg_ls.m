@@ -97,7 +97,7 @@ for j=1:n % for each pair of scans
             for c = 1:nc
                 for d = 1:nc
                     wj_mag(:,set,c,d) = smap(:,c) .* conj(smap(:,d)) .*...
-                        conj(y(:,c,i)) .* y(:,d,j); 
+                        conj(y(:,c,i)) .* y(:,d,j);
                     wj_mag(:,set,c,d) = abs(wj_mag(:,set,c,d));
                     % difference of the echo times and angles
                     ang2(:,set,c,d) = angs(:,c) - angs(:,d) + ...
@@ -105,7 +105,7 @@ for j=1:n % for each pair of scans
                     if arg.df
                         wj_mag(:,set,c,d) = wj_mag(:,set,c,d)*abs(Gamma(i,j));
                         ang2(:,set,c,d) = ang2(:,set,c,d) + angle(Gamma(i,j));
-                    end 
+                    end
                 end
             end
             set = set+1;
@@ -126,8 +126,8 @@ warned.dir = 0;
 warned.step = 0;
 %% begin iterations
 fprintf('\n ********** ite_solve: NCG **********\n')
-cost(1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + 0.5*norm(C*w,'fro')^2;
-fprintf(' ite: %d , cost: %f3\n', 0, cost(1)) 
+cost(1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + 0.5*norm(C*w)^2;
+fprintf(' ite: %d , cost: %f3\n', 0, cost(1))
 %%
 for iter=1:arg.niter
 	%% compute the gradient of the cost function and curvatures
@@ -147,7 +147,7 @@ for iter=1:arg.niter
 		npregrad = L' \ (L \ ngrad);
 	case 'ichol'
 		H = spdiag(hcurv) + CC;
-		alpha = max(max(sum(abs(H),2) ./ diag(H)) - 2,0); 
+		alpha = max(max(sum(abs(H),2) ./ diag(H)) - 2,0);
         L = ichol(H,struct('type','ict','droptol',1e-3,'diagcomp',alpha));
 		npregrad = L' \ (L \ ngrad);
     otherwise
@@ -203,7 +203,7 @@ for iter=1:arg.niter
 	CdCw = ddir'*CCw;
 	step = 0;
     for is=1:arg.stepper{2}
-        
+
         % compute the curvature and derivative for subsequent steps
         if step ~= 0
             hderiv = sum(wj_mag, [2:4]).* (w - w0);
@@ -227,8 +227,8 @@ for iter=1:arg.niter
 	CCw = CCw + step * C' * Cdir;
 	w = w + step * ddir;
     %
-    cost(iter+1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + 0.5*norm(C*w,'fro')^2;
-    fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1)) 
+    cost(iter+1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + 0.5*norm(C*w)^2;
+    fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1))
 end
 end
 
