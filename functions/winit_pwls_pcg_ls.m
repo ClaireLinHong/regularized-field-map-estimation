@@ -126,7 +126,7 @@ warned.dir = 0;
 warned.step = 0;
 %% begin iterations
 fprintf('\n ********** ite_solve: NCG **********\n')
-cost(1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + norm(C*w,'fro');
+cost(1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + 0.5*norm(C*w,'fro')^2;
 fprintf(' ite: %d , cost: %f3\n', 0, cost(1)) 
 %%
 for iter=1:arg.niter
@@ -227,7 +227,7 @@ for iter=1:arg.niter
 	CCw = CCw + step * C' * Cdir;
 	w = w + step * ddir;
     %
-    cost(iter+1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + norm(C*w,'fro');
+    cost(iter+1) = 0.5*sum(sum(wj_mag,[2:4]).*((w - w0).^2)) + 0.5*norm(C*w,'fro')^2;
     fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1)) 
 end
 end

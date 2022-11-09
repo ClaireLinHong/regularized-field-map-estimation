@@ -164,8 +164,7 @@ for iter = 1:arg.niter
 	grad = hderiv + CCw;
 	ngrad = -grad;
 	cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5 * norm(C*w)^2;
-
-	fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
+  fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
 
 	% apply preconditioner
 	switch arg.precon
@@ -276,7 +275,6 @@ end
 
 sm = w * d2 + ang2;
 cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5 * norm(C*w)^2;
-
 fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1))
 
 %output water & fat images
