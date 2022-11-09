@@ -152,7 +152,7 @@ for iter = 1:arg.niter
 	% (numerator is the derivative of original cost function at current guess,
 	% denominator is the curvatures from Funai)
     [grad, denom, sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w);
-    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5*norm(C*w,'fro')^2;
+    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5*norm(C*w)^2;
     fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
 
 	% add the regularization terms (and account for symmetric pairs with 2*)
@@ -176,7 +176,7 @@ for iter = 1:arg.niter
 end
 
 sm = w * d2 + ang2;
-cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5*norm(C*w,'fro')^2;
+cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5*norm(C*w)^2;
 
 fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1))
 
