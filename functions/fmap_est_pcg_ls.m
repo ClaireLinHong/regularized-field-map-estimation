@@ -1,12 +1,12 @@
- function [out,cost,time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
-%function [out,cost,time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
+ function [out, cost, time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
+%function [out, cost, time] = fmap_est_pcg_ls(w, y, delta, smap, varargin)
 %|
-%| Phase unwrapping of multiple data sets (w denotes frequency)
+%| Phase unwrapping of multiple data sets (w denotes frequency in rad/sec)
 %| using a NCG with monotonic line search
 %| 3D, multi-coil version
 %|
-%| cost(w) = sum(i=0 to n-1) sum(j=0 to n-1)
-%|		|yi*yj| wj (1 - cos(w*(dj-di) + \angle(yi) - \angle(yj)) + R(w)
+%| cost(w) = sum_{i=1 to n} sum_{j=1 to n}
+%|	|yi*yj| wj (1 - cos(w * (dj-di) + \angle(yi) - \angle(yj)) + R(w)
 %|
 %| in
 %|	w	[np 1]		initial estimate
@@ -36,6 +36,7 @@
 %| This algorithm is based on the paper:
 %| C Y Lin, J A Fessler,
 %| "Efficient Regularized Field Map Estimation in 3D MRI", TCI 2020
+%| http://doi.org/10.1109/TCI.2020.3031082
 
 if nargin >= 1 && streq(w, 'test')
 	out = fmap_est_pcg_ls_test(w, varargin{:});
@@ -59,7 +60,7 @@ arg.tol = 1e-3; % factor of tol, for ichol
 arg = vararg_pair(arg, varargin);
 
 %% prepare variables and finite differencing matrices
-w = double(w);
+w = double(w); % because matlab sparse cannot multiply single precision :(
 y = double(y);
 
 if isempty(arg.maskR)
@@ -68,8 +69,7 @@ end
 
 % create the sparse regularization matrix
 R = Reg1(arg.maskR, 'beta', 2^arg.l2b, 'order', arg.order, ...
-	'distance_power', 2, 'type_diff', 'spmat', 'type_penal', ...
-	'mat');
+	'distance_power', 2, 'type_diff', 'spmat', 'type_penal', 'mat');
 C = R.C;
 if ~issparse(C)
 	fail('CC = C^H * C is too slow if not sparse')
@@ -125,15 +125,17 @@ for j=1:n % for each pair of scans
         end
     end
 end
+
 % compute |s_c s_d' y_dj' y_ci| /L/s * (tj - ti)^2
 sjtotal(sjtotal==0) = 1; %avoid outside mask = 0
-wj_mag = wj_mag./sjtotal;
+wj_mag = wj_mag ./ sjtotal;
 if ~arg.df
     wj_mag = wj_mag/n;
 end
 wm_deltaD = wj_mag .* d2;
 wm_deltaD2 = wj_mag .* (d2.^2);
-ang2(isnan(ang2))=0; %avoid atan causing nan
+assert(~any(isnan(ang2), 'all'))
+ang2(isnan(ang2))=0; % avoid atan causing nan
 
 % prepare output variables
 out.ws = zeros(length(w(:)), arg.niter+1);
@@ -152,16 +154,18 @@ warned.step = 0;
 %% begin iterations
 % start timing the iterations
 tt = tic;
-fprintf('\n ********** ite_solve: NCG-MLS **********\n')
-for iter=1:arg.niter
+fprintf('\n ********** ite_solve: NCG-MLS %s **********\n', arg.precon)
+for iter = 1:arg.niter
 	% compute the gradient of the cost function and curvatures
-    [hderiv,hcurv,sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w);
+	[hderiv, hcurv, sm] = Adercurv(d2, ang2, wm_deltaD, wm_deltaD2, w);
+%save der1.mat y smap angs angy wj_mag hderiv hcurv sm d2 ang2 wm_deltaD wm_deltaD2 w
+%keyboard
 
 	grad = hderiv + CCw;
 	ngrad = -grad;
-    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
+	cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5 * norm(C*w)^2;
 
-    fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
+	fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
 
 	% apply preconditioner
 	switch arg.precon
@@ -171,20 +175,23 @@ for iter=1:arg.niter
 	case 'chol'
 		%spparms('spumoni',2) % this will let you see if sparse Cholesky is used
 		H = spdiag(hcurv) + CC;
-        L = chol(H, 'lower');
+		L = chol(H, 'lower');
 		npregrad = L' \ (L \ ngrad);
 	case 'ichol'
 		H = spdiag(hcurv) + CC;
 		alpha = max(max(sum(abs(H),2) ./ diag(H)) - 2,0); % cl max with 0
-        if arg.tol
-            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],'all'),'diagcomp',alpha));
-        else
-            L = ichol(H);
-        end
-        npregrad = L' \ (L \ ngrad);
-    otherwise
+		if arg.tol
+	            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],'all'),'diagcomp',alpha));
+	        else
+	            L = ichol(H);
+	        end
+	        npregrad = L' \ (L \ ngrad);
+	case 'none'
 		npregrad = ngrad;
-    end
+	otherwise
+		fail('bad precon %s', arg.precon)
+	end
+
 	% compute CG direction
 	newinprod = ngrad' * npregrad;
 	newinprod = real(newinprod); %should be real, but just in case
@@ -260,7 +267,7 @@ for iter=1:arg.niter
 
 	% save any iterations that are required (with times)
 	out.ws(:,iter+1) = w;
-    time(iter+1) = toc(tt);
+	time(iter+1) = toc(tt);
 	% display counter
 	if (mod(iter,500) == 1)
 		printm([num2str(iter) ' of ' num2str(arg.niter)])
@@ -268,7 +275,7 @@ for iter=1:arg.niter
 end
 
 sm = w * d2 + ang2;
-cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + norm(C*w,'fro');
+cost(iter+1) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5 * norm(C*w)^2;
 
 fprintf(' ite: %d , cost: %f3\n', iter, cost(iter+1))
 
@@ -281,7 +288,7 @@ end
 
 end
 
-function [hderiv, hcurv, sm] = Adercurv(d2,ang2,wm_deltaD,wm_deltaD2,w)
+function [hderiv, hcurv, sm] = Adercurv(d2, ang2, wm_deltaD, wm_deltaD2, w)
 % compute the data-fit derivatives and curvatures as in Funai paper
 sm = w * d2 + ang2;
 hderiv = 2 * sum(wm_deltaD .* sin(sm), [2:4]);
@@ -290,13 +297,13 @@ srm = mod(sm + pi,2*pi) - pi;
 hcurv = 2 * sum(wm_deltaD2 .* ir_sinc_nopi(srm), [2:4]);
 end
 
-function Gamma = phiInv(relamp,df,delta)
+function Gamma = phiInv(relamp, df, delta)
 n = length(delta);
 phi = [ones(n,1) sum(relamp.*exp(1i*delta(:)*df),2)]; %[n,2]
 Gamma = phi*inv(phi'*phi)*phi';
 end
 
-function x = decomp(w,relamp,df,delta,smap,y)
+function x = decomp(w, relamp, df, delta, smap, y)
 [np,nc,n] = size(y);
 phi = [ones(n,1) sum(relamp.*exp(1i*delta(:)*df),2)]; %[n,2]
 x = zeros(2,np);
