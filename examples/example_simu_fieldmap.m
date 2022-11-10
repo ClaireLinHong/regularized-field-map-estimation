@@ -2,6 +2,7 @@
 % Experiment A in "Efficient Regularized Field Map Estimation in 3D MRI",
 % 2020 TCI
 % 2022-11-07 Jeff Fessler small modifications to help debug Julia version
+% 2022-11-10 JF compute RMSE in Hz and only within the mask
 % ------------ Please setup MIRT before run -------------
 
 %% add to path: data and functions
@@ -14,8 +15,8 @@ nc = 4; % number of coils in simulation
 % load data
 load('input_object_40sl_3d_epi_snr40.mat')
 mask = maskR(:,:,zp);
-wtrue = double(in_obj.ztrue(:,:,zp)).*mask;
-mag = double(in_obj.xtrue(:,:,zp)).*mask;
+wtrue = double(in_obj.ztrue(:,:,zp)) .* mask;
+mag = double(in_obj.xtrue(:,:,zp)) .* mask;
 
 %% set parameters for data generation
 p.etime = [0 2 10] * 1e-3; % echo times
@@ -156,7 +157,7 @@ end
 
 %% RMSE plots
 argsError = {argsError_qm{:}; argsError_cg{:}; argsError_cg_d{:}; argsError_cg_ichol{:}};
-error = compute_rmsd(argsError, wtrue, 'step', 10);
+ferror = compute_rmsd(argsError, wtrue, 'step', 10, 'mask', mask);
 % labels
 grid on
 xlabel('Time (s)')
