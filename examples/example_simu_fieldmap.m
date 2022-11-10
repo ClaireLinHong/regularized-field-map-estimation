@@ -43,7 +43,6 @@ end
 
 % add complex Gaussian noise to image data
 p.SNR = 24; % set noise level
-p.SNR = inf; % todo
 rng(0)
 % compute the noise_std to get the desired SNR
 image_power = 10*log10(sum(mag.^2,1:3)/(nx*ny*nz));
