@@ -4,14 +4,14 @@
 % ------------ Please setup MIRT before run -------------
 % ------------ Please download ISMRM fat-water toolbox to folder -------------
 % (https://www.ismrm.org/workshops/FatWater12/data.htm)
-%% add to path: data and functions 
-addpath('./data')
-addpath('./functions')
-%% data 
+%% add to path: data and functions
+addpath('../data')
+addpath('../functions')
+%% data
 % ------------ Please download data from ISMRM fat-water data "kellman_data" -------------
 load('PKdata5.mat')
 imDataParams = data; %[xyzcl]
-imDataParams.images = double(data.images); 
+imDataParams.images = double(data.images);
 %% algo parameters
 algoParams.species(1).name = 'water';
 algoParams.species(1).frequency = 0;
@@ -43,7 +43,7 @@ subplot(142);im(imfat)
 subplot(143);im(ftrue)
 %% set parameters for data generation
 p.te = data.TE; % echo times
-p.SNR = 20; % set noise level 
+p.SNR = 20; % set noise level
 gyro = 42.58;
 deltaF = [0 ; gyro*(algoParams.species(2).frequency(:) - algoParams.species(1).frequency(1))*(data.FieldStrength)];
 relAmps = algoParams.species(2).relAmps;
@@ -82,7 +82,7 @@ if 1
     yNse = noise_std * (randn(size(yik)) + 1i * randn(size(yik)));
     yik = yik + yNse;
     SNR = zeros(ne,1);
-    % compute the SNR 
+    % compute the SNR
     for i = 1:ne
         tmp = norm(col(yikNN(:,:,:,:,i))) ./ norm(col(yNse(:,:,:,:,i)));
         SNR(i) = mag2db(tmp);
@@ -96,8 +96,8 @@ p.d_thresh = 0.1; % scale reg level
 [yik_scaled,scale] = ir_mri_field_map_reg_scale(yik_long, p.te, ...
 		'fmax', p.yk_thresh, 'dmax', p.d_thresh);
 yik_scaled = reshape(yik_scaled,[nx,ny,nz,nc,ne]);
-imDataParams.images = yik_scaled.*mask; 
-% 2d 
+imDataParams.images = yik_scaled.*mask;
+% 2d
 yik = reshape(yik_scaled,[nx*ny,nz,nc,ne]);
 tmp = reshape(yik,[nx,ny,nz,nc,ne]);
 %
@@ -112,7 +112,7 @@ smap_c = reshape(smap,[],nc);
 w0 = winit_water_fat(yik_c, p.te, smap_c,'maskR',mask,...
     'relamp',relAmps,'df',df);
 w0 = embed(w0(:),mask);
-wlim = 2*pi*[-200 200]; 
+wlim = 2*pi*[-200 200];
 figure(2);subplot(131);im(w0,wlim)
 % Initialize fieldmap 2: PWLS
 printm(' -- PWLS on winit -- ')
@@ -131,7 +131,7 @@ winit(~good) = mean(winit(good));
 % plot winit
 winit = reshape(winit,[nx,ny,nz]);
 figure(2); subplot(133);im(winit, wlim)
-%% add to path: graphcut 
+%% add to path: graphcut
 path_hernando = './fwtoolbox_v1_code/hernando/';
 addpath([path_hernando 'common/']);
 addpath([path_hernando 'descent/']);
@@ -151,7 +151,7 @@ imDataParams.finit = winit/2/pi;
 wmap_gc = 2*pi*outParams.fms.*mask;
 argsError_gc = {'GC', time_gc, wmap_gc};
 % plot image results
-figure(3); 
+figure(3);
 imwater_gc = outParams.species(1).amps;
 imfat_gc = outParams.species(2).amps;
 subplot(231);im(ftrue)

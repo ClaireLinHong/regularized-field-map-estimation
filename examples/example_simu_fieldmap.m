@@ -1,6 +1,8 @@
 % Claire Lin, Sept. 2020
 % Experiment A in "Efficient Regularized Field Map Estimation in 3D MRI",
 % 2020 TCI
+% 2022-11-07 Jeff Fessler small modifications to help debug Julia version
+% 2022-11-10 JF compute RMSE in Hz and only within the mask
 % ------------ Please setup MIRT before run -------------
 
 %% add to path: data and functions
@@ -13,8 +15,8 @@ nc = 4; % number of coils in simulation
 % load data
 load('input_object_40sl_3d_epi_snr40.mat')
 mask = maskR(:,:,zp);
-wtrue = double(in_obj.ztrue(:,:,zp)).*mask;
-mag = double(in_obj.xtrue(:,:,zp)).*mask;
+wtrue = double(in_obj.ztrue(:,:,zp)) .* mask;
+mag = double(in_obj.xtrue(:,:,zp)) .* mask;
 
 %% set parameters for data generation
 p.etime = [0 2 10] * 1e-3; % echo times
@@ -39,6 +41,7 @@ for kk = 1:ne
         .* exp(1i * wtrue * (p.etime(kk) - p.etime(1))) ...
         .* smap;
 end
+
 % add complex Gaussian noise to image data
 p.SNR = 24; % set noise level
 rng(0)
@@ -62,19 +65,23 @@ tmp = reshape(yik,[nx,ny,nz,nc,ne]);figure(1);im(tmp(:,:,:,1,1))
 
 %% rescale yik
 yik_sos = reshape(sum(yik.*reshape(conj(smap),[nx,ny,nz,nc]),4),[],ne); %coil combine
-[yik_scaled,scale] = ir_mri_field_map_reg_scale(yik_sos, p.etime, ...
+[yik_sos_scaled, scale] = ir_mri_field_map_reg_scale(yik_sos, p.etime, ...
 		'fmax', p.yk_thresh, 'dmax', p.d_thresh);
-yik_scaled = reshape(yik_scaled,[nx,ny,nz,ne]);
+yik_sos_scaled = reshape(yik_sos_scaled, [nx,ny,nz,ne]);
+
+
 % 2d slice by slice
-yik = reshape(yik,[nx*ny,nz,nc,ne])/scale;
+yik_scale = reshape(yik, [nx*ny, nz, nc, ne]) / scale;
+
 
 %% Initialize fieldmap (winit):
 % phase diff
 printm(' -- Using simple initialization (no smoothing) and set of normalized first two images')
-winit = angle(stackpick(yik_scaled,2) .* conj(stackpick(yik_scaled,1))) ...
+winit = angle( ...
+    stackpick(yik_sos_scaled,2) .* conj(stackpick(yik_sos_scaled,1))) ...
     / (p.etime(2) - p.etime(1)); % difference of just first two sets
 % set background pixels to mean of "good" pixels.
-mag1 = abs(stackpick(yik_scaled,1));
+mag1 = abs(stackpick(yik_sos_scaled,1));
 good = mag1 > p.yk_thresh * max(mag1(:));
 winit(~good) = mean(winit(good));
 % plot winit
@@ -84,11 +91,13 @@ figure(1); im(3, embed(winit_masked,mask)/2/pi, 'finit', flim), cbar('Hz')
 clear mag1 good
 drawnow
 
+
 %% run QM-Huber / NCG for 3D, all slices
 % initialize
-yik_c = reshape(yik,[nx*ny*nz,nc,ne]);
-smap_c = reshape(smap,[nx*ny*nz,nc]);
+yik_c = reshape(yik_scale, [nx*ny*nz,nc,ne]);
+smap_c = reshape(smap, [nx*ny*nz,nc]);
 l2b = -4;
+
 
 %% 1. QM implementation
 if ~isvar('wmap_qm')
@@ -102,18 +111,21 @@ if ~isvar('wmap_qm')
  argsError_qm = {'QM', time_qm, wmap_qm};
 end
 
+
 %% 2. NCG implementation: no precon
 if ~isvar('wmap_cg')
  niter_cg = 50;
- isave_cg = 0:niter_cg;
- [out,cost_cg,time_cg] = fmap_est_pcg_ls(winit(mask), yik_c(mask,:,:),p.etime, ...
-    smap_c(mask,:),'order', 1, 'l2b', l2b, ...
-    'niter', niter_cg,'maskR', mask,'gammaType','PR');
- wmap_cg = embed(out.ws,mask);
- figure(2); subplot(121); im(wmap_cg(:,:,:,end)/2/pi, 'cg', flim)
+%isave_cg = 0:niter_cg;
+ [out,cost_cg,time_cg] = fmap_est_pcg_ls(winit(mask), yik_c(mask,:,:), ...
+    p.etime, smap_c(mask,:), 'order', 1, 'l2b', l2b, ...
+    'niter', niter_cg, 'maskR', mask, 'precon', 'none', 'gammaType', 'PR');
+ wmap_cg = embed(out.ws, mask);
+ fmap_cg = wmap_cg(:,:,:,end)/2/pi;
+ figure(2); subplot(121); im('col', 8, fmap_cg, 'CG:I', flim); cbar
  subplot(122); semilogy(time_cg,cost_cg,'.-k')
  argsError_cg = {'NCG-MLS', time_cg, wmap_cg};
 end
+
 
 %% 3. NCG implementation: diag precon
 if ~isvar('wmap_cg_d')
@@ -122,10 +134,12 @@ if ~isvar('wmap_cg_d')
     smap_c(mask,:),'order', 1, 'l2b', l2b, ...
     'niter', niter_cg_d, 'maskR', mask, 'precon', 'diag', 'gammaType', 'PR');
  wmap_cg_d = embed(out.ws,mask);
- figure(2); subplot(121); im(wmap_cg_d(:,:,:,end)/2/pi, 'cg:diag', flim)
+ fmap_cg_d = wmap_cg_d(:,:,:,end)/2/pi;
+ figure(2); subplot(121); im(fmap_cg_d, 'cg:diag', flim); cbar
  subplot(122); semilogy(time_cg_d, cost_cg_d, '.-k')
  argsError_cg_d = {'NCG-MLS-D', time_cg_d, wmap_cg_d};
 end
+
 
 %% 4. NCG implementation: ichol precon
 if ~isvar('wmap_cg_i')
@@ -134,14 +148,16 @@ if ~isvar('wmap_cg_i')
     smap_c(mask,:),'order', 1, 'l2b', l2b, ...
     'niter', niter_cg_i, 'maskR', mask, 'precon', 'ichol', 'gammaType', 'PR');
  wmap_cg_i = embed(out.ws,mask);
- figure(2); subplot(121); im(wmap_cg_i(:,:,:,end)/2/pi, 'cg:ic', flim)
+ fmap_cg_i = wmap_cg_i(:,:,:,end)/2/pi;
+ figure(2); subplot(121); im(fmap_cg_i, 'cg:ic', flim)
  subplot(122); semilogy(time_cg_i, cost_cg_i, '.-k')
  argsError_cg_ichol = {'NCG-MLS-IC', time_cg_i, wmap_cg_i};
 end
 
+
 %% RMSE plots
 argsError = {argsError_qm{:}; argsError_cg{:}; argsError_cg_d{:}; argsError_cg_ichol{:}};
-error = compute_rmsd(argsError, wtrue, 'step', 10);
+ferror = compute_rmsd(argsError, wtrue, 'step', 10, 'mask', mask);
 % labels
 grid on
 xlabel('Time (s)')
