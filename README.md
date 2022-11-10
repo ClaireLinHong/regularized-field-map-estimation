@@ -38,3 +38,10 @@ instead over the entire image.
 Here is the updated Figure 4.
 
 ![fig4new](https://github.com/ClaireYLin/regularized-field-map-estimation/tree/main/fig/fig4new.png)
+
+
+### Related packages
+
+A Julia version of this code is under development.
+- https://github.com/JeffFessler/MRIfieldmap.jl (current location)
+- https://github.com/MagneticResonanceImaging (likely destination)
