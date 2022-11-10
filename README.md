@@ -37,7 +37,7 @@ over the mask,
 instead over the entire image.
 Here is the updated Figure 4.
 
-![fig4new](https://github.com/ClaireYLin/regularized-field-map-estimation/tree/main/fig/fig4new.png)
+![fig4new](https://github.com/ClaireYLin/regularized-field-map-estimation/blob/main/fig/fig4new.png)
 
 
 ### Related packages
