@@ -32,7 +32,6 @@ smap = double(ir_mri_sensemap_sim('nx', nx, 'ny', ny, 'nz', nz, 'ncoil', nc));
 % normalize
 tmp = sqrt(sum(abs((smap)).^2,4));
 smap = div0(smap,tmp);
-% save smap.mat smap; return
 
 %% generate data
 % multi-coil version
@@ -41,7 +40,6 @@ for kk = 1:ne
         .* exp(1i * wtrue * (p.etime(kk) - p.etime(1))) ...
         .* smap;
 end
-% save yik.mat yik; return
 
 % add complex Gaussian noise to image data
 p.SNR = 24; % set noise level
@@ -71,7 +69,6 @@ yik_sos = reshape(sum(yik.*reshape(conj(smap),[nx,ny,nz,nc]),4),[],ne); %coil co
 		'fmax', p.yk_thresh, 'dmax', p.d_thresh);
 yik_sos_scaled = reshape(yik_sos_scaled, [nx,ny,nz,ne]);
 
-% save yik_sos_scaled.mat yik_sos_scaled; return
 
 % 2d slice by slice
 yik_scale = reshape(yik, [nx*ny, nz, nc, ne]) / scale;
@@ -94,15 +91,13 @@ figure(1); im(3, embed(winit_masked,mask)/2/pi, 'finit', flim), cbar('Hz')
 clear mag1 good
 drawnow
 
-% finit = single(winit / 2 / pi);
-% save finit.mat finit; return
-
 
 %% run QM-Huber / NCG for 3D, all slices
 % initialize
 yik_c = reshape(yik_scale, [nx*ny*nz,nc,ne]);
 smap_c = reshape(smap, [nx*ny*nz,nc]);
 l2b = -4;
+
 
 %% 1. QM implementation
 if ~isvar('wmap_qm')
@@ -115,6 +110,7 @@ if ~isvar('wmap_qm')
  subplot(122);semilogy(time_qm,cost_qm,'.-k')
  argsError_qm = {'QM', time_qm, wmap_qm};
 end
+
 
 %% 2. NCG implementation: no precon
 if ~isvar('wmap_cg')
@@ -129,7 +125,7 @@ if ~isvar('wmap_cg')
  subplot(122); semilogy(time_cg,cost_cg,'.-k')
  argsError_cg = {'NCG-MLS', time_cg, wmap_cg};
 end
-% save fmap_cg50.mat fmap_cg; return
+
 
 %% 3. NCG implementation: diag precon
 if ~isvar('wmap_cg_d')
@@ -143,7 +139,7 @@ if ~isvar('wmap_cg_d')
  subplot(122); semilogy(time_cg_d, cost_cg_d, '.-k')
  argsError_cg_d = {'NCG-MLS-D', time_cg_d, wmap_cg_d};
 end
-% save fmap_cg_d50.mat fmap_cg_d; return
+
 
 %% 4. NCG implementation: ichol precon
 if ~isvar('wmap_cg_i')
@@ -157,7 +153,7 @@ if ~isvar('wmap_cg_i')
  subplot(122); semilogy(time_cg_i, cost_cg_i, '.-k')
  argsError_cg_ichol = {'NCG-MLS-IC', time_cg_i, wmap_cg_i};
 end
-% save fmap_cg_i50.mat fmap_cg_i; return
+
 
 %% RMSE plots
 argsError = {argsError_qm{:}; argsError_cg{:}; argsError_cg_d{:}; argsError_cg_ichol{:}};
