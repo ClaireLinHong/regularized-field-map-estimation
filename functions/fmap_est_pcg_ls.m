@@ -6,32 +6,32 @@
 %| 3D, multi-coil version
 %|
 %| cost(w) = sum_{i=1 to n} sum_{j=1 to n}
-%|	|yi*yj| wj (1 - cos(w * (dj-di) + \angle(yi) - \angle(yj)) + R(w)
+%|    |yi*yj| wj (1 - cos(w * (dj-di) + \angle(yi) - \angle(yj)) + R(w)
 %|
 %| in
-%|	w	[np 1]		initial estimate
-%|	y	[np nc n]	n sets of measurements for nc coils
-%|	delta	[1 n]	row vector of n echo time offsets
-%|  smap [np nc]    coil maps
+%|    w [np 1]      initial estimate
+%|    y [np nc n]   n sets of measurements for nc coils
+%|    delta [1 n]   row vector of n echo time offsets
+%|    smap [np nc]  coil maps
 %|
 %| options
-%|	stepper {'qs',# its}	monotonic line search parameters (default: {})
-%|	niter			# of iterations (def: 30)
-%|	maskR	[(np)]	logical reconstruction mask (required!)
-%|	order			order of the finite diff matrix (def: 2)
-%|	l2b             regularization parameter (2^) (def: -6)
-%|	gammaType		CG direction: PR = Polak-Ribiere (default) or FR = Fletcher-Reeves
-%|	precon			Preconditioner: 'diag', 'chol', 'ichol' (def: 'ichol')
-%|	reset			# of iterations before resetting direction (def: inf)
-%|  df              delta f value in water-fat imaging (def: 0)
-%|  relamp          relative amplitude in multipeak water-fat  (def: 1)
-%|  tol             tolerance for ichol (def: 1e-3)
+%|    stepper {'qs',# its} monotonic line search parameters (default: {})
+%|    niter                # of iterations (def: 30)
+%|    maskR [(np)]         logical reconstruction mask (required!)
+%|    order                order of the finite diff matrix (def: 2)
+%|    l2b                  regularization parameter (2^) (def: -6)
+%|    gammaType            CG direction: PR = Polak-Ribiere (default) or FR = Fletcher-Reeves
+%|    precon               Preconditioner: 'diag', 'chol', 'ichol' (def: 'ichol')
+%|    reset                # of iterations before resetting direction (def: inf)
+%|    df                   delta f value in water-fat imaging (def: 0)
+%|    relamp               relative amplitude in multipeak water-fat  (def: 1)
+%|    tol                  tolerance for ichol (def: 1e-3)
 %|
 %| out
-%|	out.ws	[np niter+1]	iterates
-%|  out.xw / out.wf [np 1] water / fat images if arg.df~=0
-%|  cost   [niter+1 1]   (nonconvex) cost for each iteration
-%|	time   [niter+1 1]	time for each iteration
+%|    out.ws [np niter+1]     iterates
+%|    out.xw / out.wf [np 1]  water / fat images if arg.df~=0
+%|    cost   [niter+1 1]      (nonconvex) cost for each iteration
+%|    time   [niter+1 1]      time for each iteration
 %|
 %| This algorithm is based on the paper:
 %| C Y Lin, J A Fessler,
@@ -39,8 +39,8 @@
 %| http://doi.org/10.1109/TCI.2020.3031082
 
 if nargin >= 1 && streq(w, 'test')
-	out = fmap_est_pcg_ls_test(w, varargin{:});
-	if ~nargout, clear out, end
+    out = fmap_est_pcg_ls_test(w, varargin{:});
+    if ~nargout, clear out, end
 return
 end
 
@@ -64,22 +64,22 @@ w = double(w); % because matlab sparse cannot multiply single precision :(
 y = double(y);
 
 if isempty(arg.maskR)
-	fail('Mask required!')
+    fail('Mask required!')
 end
 
 % create the sparse regularization matrix
 R = Reg1(arg.maskR, 'beta', 2^arg.l2b, 'order', arg.order, ...
-	'distance_power', 2, 'type_diff', 'spmat', 'type_penal', 'mat');
+    'distance_power', 2, 'type_diff', 'spmat', 'type_penal', 'mat');
 C = R.C;
 if ~issparse(C)
-	fail('CC = C^H * C is too slow if not sparse')
+    fail('CC = C^H * C is too slow if not sparse')
 end
 CC = C' * C;
 
 % apply mask to data if necessary
 if length(w) ~= sum(arg.maskR(:))
-	w = w(arg.maskR,:);
-	y = y(arg.maskR,:,:);
+    w = w(arg.maskR,:);
+    y = y(arg.maskR,:,:);
 end
 
 [np,nc,n] = size(y);
@@ -103,8 +103,8 @@ wj_mag = zeros(np,nset,nc,nc);
 d2 = zeros(1,nset);
 ang2 = zeros(np,nset,nc,nc);
 
-for j=1:n % for each pair of scans
-    for i=1:n
+for j = 1:n % for each pair of scans
+    for i = 1:n
         if i<j % only need one pair of differences
             d2(set) = delta(i) - delta(j);
             for c = 1:nc
@@ -142,7 +142,7 @@ out.ws = zeros(length(w(:)), arg.niter+1);
 out.ws(:,1) = w;
 
 if strcmp(arg.precon,'diag')
-	dCC = diag(CC);
+    dCC = diag(CC);
 end
 
 % initialize projections and NCG variables
@@ -156,90 +156,88 @@ warned.step = 0;
 tt = tic;
 fprintf('\n ********** ite_solve: NCG-MLS %s **********\n', arg.precon)
 for iter = 1:arg.niter
-	% compute the gradient of the cost function and curvatures
-	[hderiv, hcurv, sm] = Adercurv(d2, ang2, wm_deltaD, wm_deltaD2, w);
-%save der1.mat y smap angs angy wj_mag hderiv hcurv sm d2 ang2 wm_deltaD wm_deltaD2 w
-%keyboard
+    % compute the gradient of the cost function and curvatures
+    [hderiv, hcurv, sm] = Adercurv(d2, ang2, wm_deltaD, wm_deltaD2, w);
 
-	grad = hderiv + CCw;
-	ngrad = -grad;
-	cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5 * norm(C*w)^2;
-  fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
+    grad = hderiv + CCw;
+    ngrad = -grad;
+    cost(iter) = sum(wj_mag.*(1-cos(sm)),'all') + 0.5 * norm(C*w)^2;
+    fprintf(' ite: %d , cost: %f3\n', iter-1, cost(iter))
 
-	% apply preconditioner
-	switch arg.precon
-	case 'diag'
-		H = hcurv + dCC;
-		npregrad = ngrad ./ H;
-	case 'chol'
-		%spparms('spumoni',2) % this will let you see if sparse Cholesky is used
-		H = spdiag(hcurv) + CC;
-		L = chol(H, 'lower');
-		npregrad = L' \ (L \ ngrad);
-	case 'ichol'
-		H = spdiag(hcurv) + CC;
-		alpha = max(max(sum(abs(H),2) ./ diag(H)) - 2,0); % cl max with 0
-		if arg.tol
-	            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],'all'),'diagcomp',alpha));
-	        else
-	            L = ichol(H);
-	        end
-	        npregrad = L' \ (L \ ngrad);
-	case 'none'
-		npregrad = ngrad;
-	otherwise
-		fail('bad precon %s', arg.precon)
-	end
+    % apply preconditioner
+    switch arg.precon
+    case 'diag'
+        H = hcurv + dCC;
+        npregrad = ngrad ./ H;
+    case 'chol'
+        %spparms('spumoni',2) % this will let you see if sparse Cholesky is used
+        H = spdiag(hcurv) + CC;
+        L = chol(H, 'lower');
+        npregrad = L' \ (L \ ngrad);
+    case 'ichol'
+        H = spdiag(hcurv) + CC;
+        alpha = max(max(sum(abs(H),2) ./ diag(H)) - 2,0); % cl max with 0
+        if arg.tol
+            L = ichol(H,struct('type','ict','droptol',arg.tol*max(H,[],'all'),'diagcomp',alpha));
+        else
+            L = ichol(H);
+        end
+        npregrad = L' \ (L \ ngrad);
+    case 'none'
+        npregrad = ngrad;
+    otherwise
+        fail('bad precon %s', arg.precon)
+    end
 
-	% compute CG direction
-	newinprod = ngrad' * npregrad;
-	newinprod = real(newinprod); %should be real, but just in case
+    % compute CG direction
+    newinprod = ngrad' * npregrad;
+    newinprod = real(newinprod); %should be real, but just in case
 
-	if oldinprod == 0 || mod(iter, arg.reset) == 0
-		ddir = npregrad;
-		gamma = 0;
-		ngradO = ngrad;
-	else
-		if strcmp(arg.gammaType,'FR') % Fletcher-Reeves
-			gamma = newinprod / oldinprod;
-			ddir = npregrad + gamma * ddir;
+    if oldinprod == 0 || mod(iter, arg.reset) == 0
+        ddir = npregrad;
+        gamma = 0;
+        ngradO = ngrad;
+    else
+        if strcmp(arg.gammaType,'FR') % Fletcher-Reeves
+            gamma = newinprod / oldinprod;
+            ddir = npregrad + gamma * ddir;
 
-		elseif strcmp(arg.gammaType,'PR') % Polack-Ribeir
-			gamma = real((ngrad - ngradO)' * npregrad) / oldinprod;
-			ngradO = ngrad;
+        elseif strcmp(arg.gammaType,'PR') % Polack-Ribeir
+            gamma = real((ngrad - ngradO)' * npregrad) / oldinprod;
+            ngradO = ngrad;
 
-			if (gamma < 0)
-				printm('RESETTING GAMMA, iter=%d', iter)
-				gamma = 0;
-			end
+            if (gamma < 0)
+                printm('RESETTING GAMMA, iter=%d', iter)
+                gamma = 0;
+            end
 
-			ddir = npregrad + gamma * ddir;
+            ddir = npregrad + gamma * ddir;
 
-		end
-	end
-	oldinprod = newinprod;
+        end
+    end
+    oldinprod = newinprod;
 
-	% check if correct descent direction
-	if ddir' * grad > 0
-		if ~warned.dir
-			warned.dir = 1;
-			warn 'wrong direction so resetting'
-			printm('<ddir,grad>=%g, |ddir|=%g, |grad|=%g', ...
-				ddir' * grad, norm(ddir), norm(grad))
-		end
-		% reset direction if not descending
-		ddir = npregrad;
-		oldinprod = 0;
-	end
+    % check if correct descent direction
+    if ddir' * grad > 0
+        if ~warned.dir
+            warned.dir = 1;
+            warn 'wrong direction so resetting'
+            printm('<ddir,grad>=%g, |ddir|=%g, |grad|=%g', ...
+                ddir' * grad, norm(ddir), norm(grad))
+        end
+        % reset direction if not descending
+        ddir = npregrad;
+        oldinprod = 0;
+    end
 
-	% step size in search direction
-	Cdir = C * ddir; % caution: can be a big array for 3D problems
+    % step size in search direction
+    Cdir = C * ddir; % caution: can be a big array for 3D problems
 
-	% compute the monotonic line search using quadratic surrogates
-	CdCd = Cdir'*Cdir;
-	CdCw = ddir'*CCw;
-	step = 0;
-    for is=1:arg.stepper{2}
+    % compute the monotonic line search using quadratic surrogates
+    CdCd = Cdir'*Cdir;
+    CdCw = ddir'*CCw;
+    step = 0;
+    for is = 1:arg.stepper{2}
 
         % compute the curvature and derivative for subsequent steps
         if step ~= 0
@@ -260,17 +258,17 @@ for iter = 1:arg.niter
 
     end
 
-	% update the estimate and the finite differences of the estimate
-	CCw = CCw + step * C' * Cdir;
-	w = w + step * ddir;
+    % update the estimate and the finite differences of the estimate
+    CCw = CCw + step * C' * Cdir;
+    w = w + step * ddir;
 
-	% save any iterations that are required (with times)
-	out.ws(:,iter+1) = w;
-	time(iter+1) = toc(tt);
-	% display counter
-	if (mod(iter,500) == 1)
-		printm([num2str(iter) ' of ' num2str(arg.niter)])
-	end
+    % save any iterations that are required (with times)
+    out.ws(:,iter+1) = w;
+    time(iter+1) = toc(tt);
+    % display counter
+    if (mod(iter,500) == 1)
+        printm([num2str(iter) ' of ' num2str(arg.niter)])
+    end
 end
 
 sm = w * d2 + ang2;
@@ -288,29 +286,28 @@ end
 
 function [hderiv, hcurv, sm] = Adercurv(d2, ang2, wm_deltaD, wm_deltaD2, w)
 % compute the data-fit derivatives and curvatures as in Funai paper
-sm = w * d2 + ang2;
-hderiv = 2 * sum(wm_deltaD .* sin(sm), [2:4]);
-
-srm = mod(sm + pi,2*pi) - pi;
-hcurv = 2 * sum(wm_deltaD2 .* ir_sinc_nopi(srm), [2:4]);
+    sm = w * d2 + ang2;
+    hderiv = 2 * sum(wm_deltaD .* sin(sm), [2:4]);
+    srm = mod(sm + pi,2*pi) - pi;
+    hcurv = 2 * sum(wm_deltaD2 .* ir_sinc_nopi(srm), [2:4]);
 end
 
 function Gamma = phiInv(relamp, df, delta)
-n = length(delta);
-phi = [ones(n,1) sum(relamp.*exp(1i*delta(:)*df),2)]; %[n,2]
-Gamma = phi*inv(phi'*phi)*phi';
+    n = length(delta);
+    phi = [ones(n,1) sum(relamp.*exp(1i*delta(:)*df),2)]; %[n,2]
+    Gamma = phi*inv(phi'*phi)*phi';
 end
 
 function x = decomp(w, relamp, df, delta, smap, y)
-[np,nc,n] = size(y);
-phi = [ones(n,1) sum(relamp.*exp(1i*delta(:)*df),2)]; %[n,2]
-x = zeros(2,np);
-for ip = 1:np
-    B = phi.*col(exp(1i*w(ip)*delta(:))); %[n,2]
-    B = kron(col(smap(ip,:)),B); %[n*nc,2]
-    yc = permute(y(ip,:,:),[1,3,2]);
-    x(:,ip) = B\yc(:);
-end
+    [np,nc,n] = size(y);
+    phi = [ones(n,1) sum(relamp.*exp(1i*delta(:)*df),2)]; %[n,2]
+    x = zeros(2,np);
+    for ip = 1:np
+        B = phi.*col(exp(1i*w(ip)*delta(:))); %[n,2]
+        B = kron(col(smap(ip,:)),B); %[n*nc,2]
+        yc = permute(y(ip,:,:),[1,3,2]);
+        x(:,ip) = B\yc(:);
+    end
 end
 
 function wmap = fmap_est_pcg_ls_test(type, varargin)
@@ -344,10 +341,9 @@ noise_power = image_power - SNR;
 noise_std = sqrt(10^(noise_power/10));
 noise_std = noise_std / 2; % because complex
 yik = zeros(nx,ny,nz,nc,ne);
-for kk=1:ne
-    yik(:,:,:,:,kk) = mag ...
-        .* exp(1i * wtrue * (etime(kk) - etime(1))) ...
-        .* smap;
+for kk = 1:ne
+    yik(:,:,:,:,kk) = mag .* smap ...
+        .* exp(1i * wtrue * (etime(kk) - etime(1)));
 end
 rng(0)
 yik = yik + noise_std * (randn(size(yik)) + 1i * randn(size(yik)));
@@ -363,13 +359,14 @@ printm 'estimate field map'
     smap_c(mask,:),'maskR', mask,'l2b',-3,'niter',20,'order',1);
 wmap = embed(out.ws(:,end),mask);
 
-	finit = winit(mask) / (2*pi);
-	ftrue = wtrue(mask) / (2*pi);
-	fpcg = wmap(mask) / (2*pi);
-	rmse_init = sqrt(sum((finit - ftrue).^2) / sum(mask(:)));
-	rmse_pcg = sqrt(sum((fpcg - ftrue).^2) / sum(mask(:)));
-	im(5, embed(finit,mask), 'initial field map', clim), cbar('Hz')
-	titlef('initial field map, RMSE %3.1f Hz', rmse_init)
-	im(6, embed(fpcg,mask), 'regularized field map', clim), cbar('Hz')
-	titlef('regularized field map, RMSE %3.1f Hz', rmse_pcg)
+finit = winit(mask) / (2*pi);
+ftrue = wtrue(mask) / (2*pi);
+fpcg = wmap(mask) / (2*pi);
+rmse_init = sqrt(sum((finit - ftrue).^2) / sum(mask(:)));
+rmse_pcg = sqrt(sum((fpcg - ftrue).^2) / sum(mask(:)));
+im(5, embed(finit,mask), 'initial field map', clim), cbar('Hz')
+titlef('initial field map, RMSE %3.1f Hz', rmse_init)
+im(6, embed(fpcg,mask), 'regularized field map', clim), cbar('Hz')
+titlef('regularized field map, RMSE %3.1f Hz', rmse_pcg)
+
 end
