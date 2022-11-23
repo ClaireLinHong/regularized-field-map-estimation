@@ -43,7 +43,7 @@ Here is the updated Figure 4.
 ### Related packages
 
 A Julia version of this code is available at
-https://github.com/MagneticResonanceImaging/MRIfieldmaps.jl.
+https://github.com/MagneticResonanceImaging/MRIFieldmaps.jl.
 Version `v0.0.1` of that repo
 is Julia code that basically reproduces Fig. 4.
 Later versions offer improvements in speed and convenience.
