@@ -4,43 +4,55 @@
 % ------------ Please setup MIRT before run -------------
 % ------------ Please download ISMRM fat-water toolbox to folder -------------
 % (https://www.ismrm.org/workshops/FatWater12/data.htm)
+
+if ~isvar('data')
+
 %% add to path: data and functions
-addpath('../data')
-addpath('../functions')
+    addpath('../data')
+    addpath('../functions')
+
 %% data
-% ------------ Please download data from ISMRM fat-water data "kellman_data" -------------
-load('PKdata5.mat')
-imDataParams = data; %[xyzcl]
-imDataParams.images = double(data.images);
+% ---- Please download data from ISMRM fat-water data "kellman_data" -----
+    load('PKdata5.mat')
+    imDataParams = data; %[xyzcl]
+    imDataParams.images = double(data.images);
+
 %% algo parameters
-algoParams.species(1).name = 'water';
-algoParams.species(1).frequency = 0;
-algoParams.species(1).relAmps = 1;
-algoParams.species(2).name = 'fat';
-algoParams.species(2).frequency = [-3.80, -3.40, -2.60, -1.94, -0.39, 0.60];
-algoParams.species(2).relAmps = [0.087 0.693 0.128 0.004 0.039 0.048];
-% Algorithm-specific parameters
-algoParams.size_clique = 1; % Size of MRF neighborhood (1 uses an 8-neighborhood, common in 2D)
-algoParams.range_r2star = [0,0];%[0 100]; % Range of R2* values
-algoParams.NUM_R2STARS = 11; % Numbre of R2* values for quantization
-algoParams.range_fm = [-400 400]; % Range of field map values
-algoParams.NUM_FMS = 101; % Number of field map values to discretize
-algoParams.SUBSAMPLE = 1;
-algoParams.TRY_PERIODIC_RESIDUAL = 0;
+    algoParams.species(1).name = 'water';
+    algoParams.species(1).frequency = 0;
+    algoParams.species(1).relAmps = 1;
+    algoParams.species(2).name = 'fat';
+    algoParams.species(2).frequency = [-3.80, -3.40, -2.60, -1.94, -0.39, 0.60];
+    algoParams.species(2).relAmps = [0.087 0.693 0.128 0.004 0.039 0.048];
+    % Algorithm-specific parameters
+    algoParams.size_clique = 1; % Size of MRF neighborhood (1 uses an 8-neighborhood, common in 2D)
+    algoParams.range_r2star = [0,0];%[0 100]; % Range of R2* values
+    algoParams.NUM_R2STARS = 11; % Numbre of R2* values for quantization
+    algoParams.range_fm = [-400 400]; % Range of field map values
+    algoParams.NUM_FMS = 101; % Number of field map values to discretize
+    algoParams.SUBSAMPLE = 1;
+    algoParams.TRY_PERIODIC_RESIDUAL = 0;
+
 %% add to path: golden-section search
-path_lu = './fwtoolbox_v1_code/lu/';
-addpath([path_lu]);
-addpath([path_lu '/multiResSep']);
+    path_lu = '../fwtoolbox_v1_code/lu/';
+    addpath([path_lu]);
+    addpath([path_lu '/multiResSep']);
+end
+
 %% ground truth images
-outParams2 = fw_3point_wm_goldSect(imDataParams, algoParams);
+if ~isvar('outParams2')
+    outParams2 = fw_3point_wm_goldSect(imDataParams, algoParams);
+end
+
 % plot images
 imwater = outParams2.species(1).amps;
 imfat = outParams2.species(2).amps;
 ftrue = outParams2.fieldmap;
-figure(1);
-subplot(141);im(imwater)
-subplot(142);im(imfat)
-subplot(143);im(ftrue)
+figure(1); im plc 2 2
+im(imwater)
+im(imfat)
+im(ftrue)
+
 %% set parameters for data generation
 p.te = data.TE; % echo times
 p.SNR = 20; % set noise level
@@ -48,6 +60,7 @@ gyro = 42.58;
 deltaF = [0 ; gyro*(algoParams.species(2).frequency(:) - algoParams.species(1).frequency(1))*(data.FieldStrength)];
 relAmps = algoParams.species(2).relAmps;
 [nx,ny,nz,nc,ne] = size(data.images);
+
 % simu data
 ytrue = zeros(nx,ny,nz,nc,ne);
 for kk=1:ne
@@ -55,6 +68,7 @@ for kk=1:ne
         sum(relAmps(:).*exp(1i*2*pi*deltaF(2:end).*p.te(kk)))) ...
         .*exp(1i*2*pi*ftrue*p.te(kk));
 end
+
 %% generate mask
 [nx,ny,nz] = size(ftrue);
 mag0 = abs(ytrue(:,:,:,:,1));
@@ -65,9 +79,10 @@ mask = zeros(nx,ny,nz);
 for iz = 1:nz
     mask(:,:,iz) = bwconvhull(maskErr(:,:,iz), 'union');
 end
-mask = mask>0;
+mask = mask > 0;
+
 %% simu data
-yik = ytrue.*mask;
+yik = ytrue .* mask;
 % add complex Gaussian noise to image data
 if 1
     mag0 = abs(yik(:,:,:,:,1));
@@ -89,7 +104,8 @@ if 1
     end
     pr SNR
 end
-% rescale
+
+%% rescale
 yik_long = reshape(yik,[],ne);
 p.yk_thresh = 0.1; % scale image
 p.d_thresh = 0.1; % scale reg level
@@ -102,6 +118,7 @@ yik = reshape(yik_scaled,[nx*ny,nz,nc,ne]);
 tmp = reshape(yik,[nx,ny,nz,nc,ne]);
 %
 figure(1);subplot(144);im(tmp(:,:,:,1,1))
+
 %% Initialize fieldmap 1: discretization
 smap = ones(nx,ny,nz,nc);
 df = 2*pi*deltaF(2:end).'; %[1,ne]
@@ -114,6 +131,7 @@ w0 = winit_water_fat(yik_c, p.te, smap_c,'maskR',mask,...
 w0 = embed(w0(:),mask);
 wlim = 2*pi*[-200 200];
 figure(2);subplot(131);im(w0,wlim)
+
 % Initialize fieldmap 2: PWLS
 printm(' -- PWLS on winit -- ')
 y = reshape(yik,[],nc,ne);
@@ -123,6 +141,7 @@ w1 = winit_pwls_pcg_ls(w0(mask), yik_c(mask,:,:), p.te,...
         'gammaType','PR','df',df,'relamp',relAmps);
 w1 = embed(w1,mask);
 figure(2);subplot(132);im(w1,wlim)
+
 % Initialize fieldmap 3: set background pixels to mean of "good" pixels
 winit = w1;
 p.yk_thresh = 0.01;
@@ -131,14 +150,40 @@ winit(~good) = mean(winit(good));
 % plot winit
 winit = reshape(winit,[nx,ny,nz]);
 figure(2); subplot(133);im(winit, wlim)
+
+%% save data to file for julia to read
+if 0
+    images_original = single(imDataParams.images);
+    ppm = single(algoParams.species(2).frequency);
+    relamp = single(algoParams.species(2).relAmps);
+    water_true = single(imwater);
+    fat_true = single(imfat);
+    ftrue = single(ftrue);
+    df = single(deltaF(2:end));
+    finit0 = single(w0/2/pi);
+    finit1 = single(w1/2/pi);
+    finit2 = single(winit/2/pi);
+    echotime = single(data.TE);
+    tmp1 = yik;
+    yik = single(reshape(yik, nx, ny, nz, 1, 8));
+    ytrue = single(ytrue);
+%   save linsim2.mat images_original df ppm relamp water_true fat_true ftrue echotime finit0 finit1 finit2 mask ytrue yik
+    yik = tmp1;
+return
+end
+
+
 %% add to path: graphcut
-path_hernando = './fwtoolbox_v1_code/hernando/';
+path_hernando = '../fwtoolbox_v1_code/hernando/';
 addpath([path_hernando 'common/']);
 addpath([path_hernando 'descent/']);
 addpath([path_hernando 'graphcut/']);
 addpath([path_hernando 'mixed_fitting/']);
 addpath([path_hernando 'create_synthetic/']);
-addpath([path_hernando 'matlab-bgl-master/']);
+%addpath([path_hernando 'matlab-bgl-master/']);
+addpath([path_hernando 'matlab_bgl/']);
+% could not run due to missing mex file for max_flow_mex.c
+
 %% 0. Graphcut implementation
 algoParams.DO_OT = 0; % Optimal transfer
 algoParams.OT_ITERS = 100; % number of optimal transfer iterations
@@ -163,6 +208,7 @@ subplot(236);im(imfat_gc)
 % plot RMSE
 argsError = {argsError_gc{:}};
 error = compute_rmsd(argsError, wtrue);%,'linestyle',linestyle);
+
 %% 1. QM implementation
 niter_qm = 500;
 [out,cost_qm,time_qm] = fmap_est_qm(winit(mask), yik_c(mask,:,:), p.te,...
@@ -200,6 +246,7 @@ ColorOdrCustom = [0 0 0;...
                 1 0 0];
 ColorOdrCustom = kron(ColorOdrCustom,[1;1;1]);
 set(gca,'ColorOrder',ColorOdrCustom);
+
 %% Field map plots
 clim = [-100,200];
 ie = 1;
@@ -208,6 +255,7 @@ subplot(131);im(['notick'], 'row',1, [], [], mask.*ytrue(:,:,:,:,ie), [0,150],' 
 subplot(132);im(['notick'], 'row',1, [], [], w0/2/pi, clim,' ');cbar
 subplot(133);im(['notick'], 'row',1, [], [], winit/2/pi, clim,' ');cbar
 colormap gray
+
 %% Image plots
 figure;
 % ground truth
