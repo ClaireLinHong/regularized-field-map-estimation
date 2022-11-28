@@ -164,11 +164,10 @@ if 0
     finit1 = single(w1/2/pi);
     finit2 = single(winit/2/pi);
     echotime = single(data.TE);
-    tmp1 = yik;
-    yik = single(reshape(yik, nx, ny, nz, 1, 8));
+    ydata = single(reshape(yik, nx, ny, nz, 1, 8));
     ytrue = single(ytrue);
-%   save linsim2.mat images_original df ppm relamp water_true fat_true ftrue echotime finit0 finit1 finit2 mask ytrue yik
-    yik = tmp1;
+%   norm(col(ytrue))/norm(col(ydata)) % ≈ scale
+%   save linsim2.mat images_original df ppm relamp water_true fat_true ftrue echotime finit0 finit1 finit2 mask scale ytrue ydata
 return
 end
 
