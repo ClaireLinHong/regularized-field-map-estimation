@@ -10,6 +10,14 @@ from [http://web.eecs.umich.edu/~fessler/code/index.html]
 or [https://github.com/JeffFessler/mirt].
 Please set up MIRT before running the examples.
 
+The key function is
+[`fmap_est_pcg_ls`](https://github.com/ClaireYLin/regularized-field-map-estimation/blob/main/functions/fmap_est_pcg_ls.m)
+that estimates field maps
+from sets of images having 2 or more echo times
+from 1 or more coils
+using a nonlinear conjugate gradient method
+with a incomplete Cholesky preconditioner.
+
 The following scripts are in the example folder:
 1. `example_simu_fieldmap.m`: Figs. 3,4
 (Same procedure is used to reproduce Figs. 5,6,
